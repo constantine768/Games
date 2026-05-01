@@ -206,14 +206,14 @@
     // Game Constants
     const CANVAS_WIDTH = 360;
     const CANVAS_HEIGHT = 640;
-    const GRAVITY = 0.4;
-    const JUMP_POWER = -10.5;
-    const SUPER_JUMP_POWER = -16.5;
-    const MEGA_JUMP_POWER = -24.5;
-    const PLAYER_SPEED = 3;
+    const GRAVITY = 0.25; // Reduced from 0.4 for a floatier fall
+    const JUMP_POWER = -8.5; // Reduced from -10.5
+    const SUPER_JUMP_POWER = -13.0; // Reduced from -16.5
+    const MEGA_JUMP_POWER = -19.0; // Reduced from -24.5
+    const PLAYER_SPEED = 6;
     const PLATFORM_WIDTH = 65;
     const PLATFORM_HEIGHT = 15;
-    const MAX_FALL_SPEED = 15;
+    const MAX_FALL_SPEED = 12; // Reduced from 15
 
     // Game State
     let state = 'START'; // START, PLAYING, GAMEOVER
