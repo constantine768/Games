@@ -37,6 +37,8 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            /* hint to the browser that this canvas will be updated frequently */
+            image-rendering: optimizeSpeed; 
         }
         /* Custom UI Font */
         @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
@@ -67,8 +69,8 @@
                 <span class="block">📱 Touch & Drag to move</span>
             </p>
             <div class="flex gap-4 justify-center mb-6 text-sm font-bold text-gray-700">
-                <div class="flex items-center"><div class="w-4 h-4 bg-green-500 rounded-sm mr-2"></div> Normal</div>
-                <div class="flex items-center"><div class="w-4 h-4 bg-orange-400 rounded-sm mr-2 shadow-[0_-2px_0_yellow_inset]"></div> Power Jump!</div>
+                <div class="flex items-center"><div class="w-4 h-4 bg-green-500 mr-2"></div> Normal</div>
+                <div class="flex items-center"><div class="w-4 h-4 bg-orange-400 mr-2 shadow-[0_-2px_0_yellow_inset]"></div> Power Jump!</div>
             </div>
             <button id="start-btn" class="game-font text-2xl bg-blue-500 hover:bg-blue-600 text-white py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 border-b-4 border-blue-700">
                 PLAY NOW
@@ -114,8 +116,39 @@
 
 <script>
     const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
+    // Use alpha: false if background is solid, but we use CSS gradient behind canvas, so alpha: true is needed.
+    // However, drawing a solid rect first might be faster.
+    const ctx = canvas.getContext('2d', { alpha: true }); 
     
+    // --- ASSET PRE-RENDERING FOR PERFORMANCE ---
+    // Rendering text (emojis) every frame is a massive performance bottleneck on mobile.
+    // We pre-draw them to offscreen canvases and copy the pixels over.
+    const preRenderDog = document.createElement('canvas');
+    preRenderDog.width = 40; preRenderDog.height = 40;
+    const pCtxDog = preRenderDog.getContext('2d');
+    pCtxDog.font = "38px Arial";
+    pCtxDog.textAlign = "center"; pCtxDog.textBaseline = "middle";
+    pCtxDog.fillText("🐶", 20, 20);
+
+    const preRenderRocket = document.createElement('canvas');
+    preRenderRocket.width = 20; preRenderRocket.height = 20;
+    const pCtxRocket = preRenderRocket.getContext('2d');
+    pCtxRocket.fillStyle = '#fff';
+    pCtxRocket.font = "14px Arial";
+    pCtxRocket.textAlign = "center"; pCtxRocket.textBaseline = "middle";
+    pCtxRocket.fillText("🚀", 10, 10);
+
+    const preRenderCloud = document.createElement('canvas');
+    preRenderCloud.width = 100; preRenderCloud.height = 60;
+    const pCtxCloud = preRenderCloud.getContext('2d');
+    pCtxCloud.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    pCtxCloud.beginPath();
+    pCtxCloud.arc(30, 40, 20, 0, Math.PI * 2);
+    pCtxCloud.arc(50, 25, 25, 0, Math.PI * 2);
+    pCtxCloud.arc(70, 40, 20, 0, Math.PI * 2);
+    pCtxCloud.fill();
+    // ------------------------------------------
+
     // UI Elements
     const startScreen = document.getElementById('start-screen');
     const gameOverScreen = document.getElementById('game-over-screen');
@@ -157,7 +190,6 @@
         }
     }
 
-    // Synthesizer for game sounds (No external files needed!)
     function playSound(type) {
         if (isMuted || !audioCtx) return;
         
@@ -221,14 +253,14 @@
     // Game Constants
     const CANVAS_WIDTH = 360;
     const CANVAS_HEIGHT = 640;
-    const GRAVITY = 0.1; // Reduced from 0.4 for a floatier fall
-    const JUMP_POWER = -8.5; // Reduced from -10.5
-    const SUPER_JUMP_POWER = -13.0; // Reduced from -16.5
-    const MEGA_JUMP_POWER = -19.0; // Reduced from -24.5
+    const GRAVITY = 0.1; 
+    const JUMP_POWER = -8.5; 
+    const SUPER_JUMP_POWER = -13.0; 
+    const MEGA_JUMP_POWER = -19.0; 
     const PLAYER_SPEED = 6;
     const PLATFORM_WIDTH = 65;
     const PLATFORM_HEIGHT = 15;
-    const MAX_FALL_SPEED = 6; // Reduced from 15
+    const MAX_FALL_SPEED = 6; 
 
     // Game State
     let state = 'START'; // START, PLAYING, GAMEOVER
@@ -321,12 +353,14 @@
 
     function initClouds() {
         clouds = [];
-        for(let i=0; i<6; i++) {
+        for(let i=0; i<4; i++) { // Reduced count slightly for perf
+            let scale = 0.5 + Math.random() * 0.8;
             clouds.push({
                 x: Math.random() * CANVAS_WIDTH,
                 y: Math.random() * CANVAS_HEIGHT,
-                speed: 0.2 + Math.random() * 0.3,
-                size: 30 + Math.random() * 40
+                speed: 0.1 + Math.random() * 0.2,
+                width: 100 * scale,
+                height: 60 * scale
             });
         }
     }
@@ -394,12 +428,12 @@
     }
 
     function startGame(level = 1) {
-        initAudio(); // Initialize audio context upon user interaction
+        initAudio(); 
         state = 'PLAYING';
         startScreen.classList.add('hidden');
         gameOverScreen.classList.add('hidden');
         hud.classList.remove('hidden');
-        mobileControls.classList.remove('hidden'); // Show controls
+        mobileControls.classList.remove('hidden'); 
         
         currentLevel = level;
         score = checkpoints[level] ? checkpoints[level].score : 0;
@@ -431,14 +465,13 @@
         state = 'GAMEOVER';
         playSound('gameover');
         hud.classList.add('hidden');
-        mobileControls.classList.add('hidden'); // Hide controls
+        mobileControls.classList.add('hidden'); 
         gameOverScreen.classList.remove('hidden');
         
         if (score > highscore) {
             highscore = Math.floor(score);
             localStorage.setItem('jumpingDogHighscore', highscore);
             
-            // Push to Google Play Games Services if wrapped in Android App
             if (window.AndroidPlayBridge && window.AndroidPlayBridge.saveHighscore) {
                 window.AndroidPlayBridge.saveHighscore(highscore, currentLevel);
             }
@@ -473,34 +506,31 @@
             player.vx = PLAYER_SPEED;
             player.facingRight = true;
         } else if (isTouching && touchTargetX !== null) {
-            // Smooth follow for touch/mouse
             const dx = touchTargetX - (player.x + player.width/2);
             if (Math.abs(dx) > 5) {
-                player.vx = dx * 0.15; // Interpolation speed
+                player.vx = dx * 0.15; 
                 player.facingRight = dx > 0;
             } else {
-                player.vx *= 0.5; // Friction when close
+                player.vx *= 0.5; 
             }
         } else {
-            player.vx *= 0.8; // Friction
+            player.vx *= 0.8; 
         }
 
-        // Apply velocity to position
         player.x += player.vx;
         
-        // Screen wrap horizontally
         if (player.x > CANVAS_WIDTH) {
             player.x = -player.width;
         } else if (player.x + player.width < 0) {
             player.x = CANVAS_WIDTH;
         }
 
-        // Player Y Movement (Physics)
+        // Player Y Movement 
         player.vy += GRAVITY;
         if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED;
         player.y += player.vy;
 
-        // Platform specific logic (movement)
+        // Platform specific logic
         platforms.forEach(p => {
             if (p.type === 'moving') {
                 p.x += p.vx;
@@ -511,18 +541,16 @@
         });
 
         // Collision Detection
-        if (player.vy > 0) { // Only collide when falling down
+        if (player.vy > 0) { 
             for (let i = 0; i < platforms.length; i++) {
                 let p = platforms[i];
                 if (p.broken) continue;
 
-                // Check overlap
                 if (player.x + player.width * 0.8 > p.x && 
                     player.x + player.width * 0.2 < p.x + p.width && 
                     player.y + player.height >= p.y && 
                     player.y + player.height <= p.y + p.height + player.vy) {
                     
-                    // Bounce
                     player.y = p.y - player.height;
                     
                     if (p.type === 'super') {
@@ -557,22 +585,20 @@
             score += diff * 0.1;
             hudScore.innerText = Math.floor(score);
             
-            // Move platforms down
             platforms.forEach(p => p.y += diff);
-            clouds.forEach(c => c.y += diff * 0.5); // Parallax clouds
+            clouds.forEach(c => c.y += diff * 0.5); 
         }
 
-        // Manage Platforms (Remove off-screen, add new ones)
+        // Manage Platforms 
         for (let i = platforms.length - 1; i >= 0; i--) {
             if (platforms[i].y > CANVAS_HEIGHT || platforms[i].broken) {
                 platforms.splice(i, 1);
             }
         }
 
-        // Ensure we always have platforms generating upwards
         let highestPlatform = platforms.reduce((min, p) => p.y < min ? p.y : min, CANVAS_HEIGHT);
         while (highestPlatform > -50) {
-            let newY = highestPlatform - (35 + Math.random() * (25 + Math.min(currentLevel*2, 20))); // Denser gap
+            let newY = highestPlatform - (35 + Math.random() * (25 + Math.min(currentLevel*2, 20))); 
             platforms.push(createPlatform(newY));
             highestPlatform = newY;
         }
@@ -589,13 +615,12 @@
         // Update Clouds
         clouds.forEach(c => {
             c.x -= c.speed;
-            if (c.x + c.size * 2 < 0) {
-                c.x = CANVAS_WIDTH + c.size;
+            if (c.x + c.width < 0) {
+                c.x = CANVAS_WIDTH;
                 c.y = Math.random() * CANVAS_HEIGHT;
             }
         });
 
-        // Check Game Over
         if (player.y > CANVAS_HEIGHT) {
             gameOver();
         }
@@ -605,64 +630,41 @@
         ctx.save();
         ctx.translate(x + w/2, y + h/2);
         
-        // Slight stretch/squash based on velocity
         let stretch = 1 + (vy * 0.02);
         let squash = 1 - (vy * 0.02);
-        // Clamp limits
         stretch = Math.max(0.8, Math.min(1.2, stretch));
         squash = Math.max(0.8, Math.min(1.2, squash));
         
         ctx.scale(facingRight ? squash : -squash, stretch);
         
-        // Draw Dog emoji as graphics fallback
-        ctx.font = "38px Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("🐶", 0, 0);
+        // Draw using pre-rendered canvas image (Vastly faster than text rendering)
+        ctx.drawImage(preRenderDog, -20, -20);
         
         ctx.restore();
     }
 
     function draw() {
-        // Clear background (handled by CSS gradient mostly, but clear canvas)
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // Draw Clouds
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        // Draw Pre-rendered Clouds
         clouds.forEach(c => {
-            ctx.beginPath();
-            ctx.arc(c.x, c.y, c.size, Math.PI * 0.5, Math.PI * 1.5);
-            ctx.arc(c.x + c.size, c.y - c.size*0.3, c.size*0.8, Math.PI, Math.PI * 2);
-            ctx.arc(c.x + c.size*2, c.y, c.size, Math.PI * 1.5, Math.PI * 0.5);
-            ctx.closePath();
-            ctx.fill();
+            ctx.drawImage(preRenderCloud, c.x, c.y, c.width, c.height);
         });
 
-        // Draw Platforms
+        // Draw Platforms (Optimized: Replaced expensive roundRect with fillRect)
         platforms.forEach(p => {
             if (p.broken) return;
 
             if (p.type === 'normal') {
-                // Green grassy tile
-                ctx.fillStyle = '#4ade80'; // top grass
-                ctx.beginPath();
-                ctx.roundRect(p.x, p.y, p.width, p.height, 6);
-                ctx.fill();
-                
-                // Dirt bottom
+                ctx.fillStyle = '#4ade80';
+                ctx.fillRect(p.x, p.y, p.width, p.height);
                 ctx.fillStyle = '#854d0e';
-                ctx.beginPath();
-                ctx.roundRect(p.x, p.y + p.height - 5, p.width, 5, {bottomLeft: 6, bottomRight: 6});
-                ctx.fill();
+                ctx.fillRect(p.x, p.y + p.height - 5, p.width, 5);
                 
             } else if (p.type === 'power') {
-                // Orange/Yellow Springy tile
                 ctx.fillStyle = '#fb923c';
-                ctx.beginPath();
-                ctx.roundRect(p.x, p.y, p.width, p.height, 6);
-                ctx.fill();
+                ctx.fillRect(p.x, p.y, p.width, p.height);
 
-                // Spring indicator
                 ctx.strokeStyle = '#eab308';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
@@ -672,24 +674,14 @@
                 ctx.lineTo(p.x + p.width/2 + 10, p.y - 12);
                 ctx.stroke();
             } else if (p.type === 'moving') {
-                // Blue moving tile
-                ctx.fillStyle = '#60a5fa'; // top ice/water
-                ctx.beginPath();
-                ctx.roundRect(p.x, p.y, p.width, p.height, 6);
-                ctx.fill();
-                
-                ctx.fillStyle = '#1e3a8a'; // bottom
-                ctx.beginPath();
-                ctx.roundRect(p.x, p.y + p.height - 5, p.width, 5, {bottomLeft: 6, bottomRight: 6});
-                ctx.fill();
+                ctx.fillStyle = '#60a5fa';
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+                ctx.fillStyle = '#1e3a8a';
+                ctx.fillRect(p.x, p.y + p.height - 5, p.width, 5);
             } else if (p.type === 'fragile') {
-                // Brown cracked tile
                 ctx.fillStyle = '#d97706';
-                ctx.beginPath();
-                ctx.roundRect(p.x, p.y, p.width, p.height, 6);
-                ctx.fill();
+                ctx.fillRect(p.x, p.y, p.width, p.height);
                 
-                // Cracks
                 ctx.strokeStyle = '#78350f';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
@@ -701,30 +693,21 @@
                 ctx.lineTo(p.x + 45, p.y + p.height);
                 ctx.stroke();
             } else if (p.type === 'super') {
-                // Purple Rocket tile
                 ctx.fillStyle = '#a855f7';
-                ctx.beginPath();
-                ctx.roundRect(p.x, p.y, p.width, p.height, 6);
-                ctx.fill();
-
-                // Upward arrows
-                ctx.fillStyle = '#fff';
-                ctx.font = "14px Arial";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText("🚀", p.x + p.width/2, p.y + p.height/2 + 2);
+                ctx.fillRect(p.x, p.y, p.width, p.height);
+                
+                // Draw pre-rendered rocket emoji
+                ctx.drawImage(preRenderRocket, p.x + p.width/2 - 10, p.y + p.height/2 - 8);
             }
         });
 
-        // Draw Particles
+        // Draw Particles (Optimized: Replaced arc with fillRect and grouped globalAlpha)
         particles.forEach(p => {
             ctx.globalAlpha = p.life;
             ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.fillRect(p.x - 3, p.y - 3, 6, 6); 
         });
-        ctx.globalAlpha = 1.0; // Reset alpha
+        ctx.globalAlpha = 1.0; 
 
         // Draw Player
         if (state === 'PLAYING') {
@@ -739,12 +722,10 @@
         if (state === 'PLAYING') {
             animationId = requestAnimationFrame(gameLoop);
         } else if (state === 'GAMEOVER') {
-            // Draw one last frame to show falling dog
             draw();
         }
     }
 
-    // Initial background draw
     initClouds();
     draw();
 
