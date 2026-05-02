@@ -60,6 +60,46 @@
             🔊
         </button>
 
+        <!-- Options Button -->
+        <button id="options-btn" class="absolute top-4 left-4 text-2xl drop-shadow-md pointer-events-auto cursor-pointer hover:scale-110 transition-transform z-50 bg-white/50 rounded-full w-12 h-12 flex items-center justify-center border border-white/50 shadow-lg" aria-label="Options">
+            ⚙️
+        </button>
+
+        <!-- Options Screen -->
+        <div id="options-screen" class="hidden absolute inset-0 flex flex-col items-center justify-center pointer-events-auto transition-opacity duration-300 bg-black/60 z-50 backdrop-blur-sm p-4">
+            <div class="bg-white/90 p-6 rounded-2xl border border-white/50 shadow-xl w-full max-w-sm">
+                <h2 class="text-3xl game-font text-blue-800 drop-shadow-md mb-4 text-center">Settings</h2>
+                
+                <!-- Gravity -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold mb-1 flex justify-between">Gravity: <span id="val-gravity">0.10</span></label>
+                    <input type="range" id="slider-gravity" min="0.01" max="0.5" step="0.01" value="0.1" class="w-full accent-blue-500">
+                </div>
+
+                <!-- Jump Power -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold mb-1 flex justify-between">Jump Power: <span id="val-jump">-8.5</span></label>
+                    <input type="range" id="slider-jump" min="-25" max="-2" step="0.5" value="-8.5" class="w-full accent-blue-500">
+                </div>
+
+                <!-- Player Speed -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold mb-1 flex justify-between">Player Speed: <span id="val-speed">6.0</span></label>
+                    <input type="range" id="slider-speed" min="1" max="15" step="0.5" value="6" class="w-full accent-blue-500">
+                </div>
+
+                <!-- Max Fall Speed -->
+                <div class="mb-6">
+                    <label class="block text-gray-700 font-bold mb-1 flex justify-between">Max Fall Speed: <span id="val-fall">6.0</span></label>
+                    <input type="range" id="slider-fall" min="2" max="25" step="0.5" value="6" class="w-full accent-blue-500">
+                </div>
+
+                <button id="close-options-btn" class="w-full game-font text-xl bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 border-b-4 border-blue-700">
+                    CLOSE
+                </button>
+            </div>
+        </div>
+
         <!-- Start Screen -->
         <div id="start-screen" class="text-center pointer-events-auto transition-opacity duration-300 bg-white/30 p-6 rounded-2xl backdrop-blur-sm border border-white/50 shadow-lg">
             <h1 class="text-5xl game-font text-blue-800 drop-shadow-md mb-2">Jumping Dog</h1>
@@ -94,7 +134,7 @@
     </div>
     
     <!-- Score HUD -->
-    <div id="hud" class="absolute top-4 left-4 right-4 flex justify-between hidden pointer-events-none">
+    <div id="hud" class="absolute top-20 left-4 right-4 flex justify-between hidden pointer-events-none">
         <div class="game-font text-2xl text-blue-900 drop-shadow-[0_2px_2px_rgba(255,255,255,0.8)]">
             Score: <span id="hud-score">0</span>
         </div>
@@ -118,14 +158,16 @@
     // Game Constants
     const CANVAS_WIDTH = 360;
     const CANVAS_HEIGHT = 640;
-    const GRAVITY = 0.25; 
-    const JUMP_POWER = -12.5; 
-    const SUPER_JUMP_POWER = -13.0; 
-    const MEGA_JUMP_POWER = -19.0; 
-    const PLAYER_SPEED = 10;
+    
+    // Physics variables (Changed from const to let so sliders can adjust them)
+    let GRAVITY = 0.1; 
+    let JUMP_POWER = -8.5; 
+    let SUPER_JUMP_POWER = -13.0; 
+    let MEGA_JUMP_POWER = -19.0; 
+    let PLAYER_SPEED = 6;
+    let MAX_FALL_SPEED = 6; 
     const PLATFORM_WIDTH = 65;
     const PLATFORM_HEIGHT = 15;
-    const MAX_FALL_SPEED = 10; 
 
     // Game State
     let state = 'START'; // START, PLAYING, GAMEOVER
@@ -204,6 +246,20 @@
     const retryLevelBtn = document.getElementById('retry-level-btn');
     const retryLevelNum = document.getElementById('retry-level-num');
     const muteBtn = document.getElementById('mute-btn');
+    const optionsBtn = document.getElementById('options-btn');
+    const optionsScreen = document.getElementById('options-screen');
+    const closeOptionsBtn = document.getElementById('close-options-btn');
+    
+    // Sliders & Labels
+    const sliderGravity = document.getElementById('slider-gravity');
+    const valGravity = document.getElementById('val-gravity');
+    const sliderJump = document.getElementById('slider-jump');
+    const valJump = document.getElementById('val-jump');
+    const sliderSpeed = document.getElementById('slider-speed');
+    const valSpeed = document.getElementById('val-speed');
+    const sliderFall = document.getElementById('slider-fall');
+    const valFall = document.getElementById('val-fall');
+
     const mobileControls = document.getElementById('mobile-controls');
     const btnLeft = document.getElementById('btn-left');
     const btnRight = document.getElementById('btn-right');
@@ -216,6 +272,38 @@
         isMuted = !isMuted;
         muteBtn.innerText = isMuted ? '🔇' : '🔊';
         if (!isMuted && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    });
+
+    // Options UI Event Listeners
+    optionsBtn.addEventListener('click', () => {
+        optionsScreen.classList.remove('hidden');
+    });
+
+    closeOptionsBtn.addEventListener('click', () => {
+        optionsScreen.classList.add('hidden');
+    });
+
+    sliderGravity.addEventListener('input', (e) => {
+        GRAVITY = parseFloat(e.target.value);
+        valGravity.innerText = GRAVITY.toFixed(2);
+    });
+
+    sliderJump.addEventListener('input', (e) => {
+        JUMP_POWER = parseFloat(e.target.value);
+        // Automatically scale the power-up jumps so they remain proportionally powerful
+        SUPER_JUMP_POWER = JUMP_POWER * 1.5;
+        MEGA_JUMP_POWER = JUMP_POWER * 2.2;
+        valJump.innerText = JUMP_POWER.toFixed(1);
+    });
+
+    sliderSpeed.addEventListener('input', (e) => {
+        PLAYER_SPEED = parseFloat(e.target.value);
+        valSpeed.innerText = PLAYER_SPEED.toFixed(1);
+    });
+
+    sliderFall.addEventListener('input', (e) => {
+        MAX_FALL_SPEED = parseFloat(e.target.value);
+        valFall.innerText = MAX_FALL_SPEED.toFixed(1);
     });
 
     function initAudio() {
