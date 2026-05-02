@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jumping Dog</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Include PixiJS for Hardware Accelerated Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+    <style>
+        body {
+            background-color: #1e293b;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+        }
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 450px; /* Limits size on large desktop screens */
+            height: 100vh;
+            max-height: 800px;
+            aspect-ratio: 9/16;
+            background: linear-gradient(to bottom, #87CEEB 0%, #e0f6ff 100%);
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        @media (min-width: 450px) {
+            #game-wrapper {
+                height: 90vh;
+                border-radius: 16px;
+            }
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        /* Custom UI Font */
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        .game-font {
+            font-family: 'Fredoka One', cursive;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <canvas id="gameCanvas" width="360" height="640"></canvas>
+    
+    <!-- UI Overlay -->
+    <div id="ui-layer" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        
+        <!-- Mute Button -->
+        <button id="mute-btn" class="absolute top-4 right-4 text-2xl drop-shadow-md pointer-events-auto cursor-pointer hover:scale-110 transition-transform z-50 bg-white/50 rounded-full w-12 h-12 flex items-center justify-center border border-white/50 shadow-lg" aria-label="Toggle Sound">
+            🔊
+        </button>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="text-center pointer-events-auto transition-opacity duration-300 bg-white/30 p-6 rounded-2xl backdrop-blur-sm border border-white/50 shadow-lg">
+            <h1 class="text-5xl game-font text-blue-800 drop-shadow-md mb-2">Jumping Dog</h1>
+            <p class="text-gray-800 font-bold mb-6">Bounce on the tiles!</p>
+            <p class="text-sm text-gray-700 mb-4 bg-white/50 p-2 rounded">
+                <span class="block">💻 Use Arrows or A/D</span>
+                <span class="block">📱 Touch & Drag to move</span>
+            </p>
+            <div class="flex gap-4 justify-center mb-6 text-sm font-bold text-gray-700">
+                <div class="flex items-center"><div class="w-4 h-4 bg-green-500 mr-2"></div> Normal</div>
+                <div class="flex items-center"><div class="w-4 h-4 bg-orange-400 mr-2 shadow-[0_-2px_0_yellow_inset]"></div> Power Jump!</div>
+            </div>
+            <button id="start-btn" class="game-font text-2xl bg-blue-500 hover:bg-blue-600 text-white py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 border-b-4 border-blue-700">
+                PLAY NOW
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="hidden text-center pointer-events-auto transition-opacity duration-300 bg-white/40 p-6 rounded-2xl backdrop-blur-md border border-white/50 shadow-xl">
+            <h1 class="text-5xl game-font text-red-600 drop-shadow-md mb-2">Game Over!</h1>
+            <p class="text-2xl game-font text-blue-800 mb-2">Score: <span id="final-score">0</span></p>
+            <p class="text-lg game-font text-gray-700 mb-6">Best: <span id="best-score">0</span></p>
+            <div class="flex flex-col gap-3">
+                <button id="retry-level-btn" class="game-font text-xl bg-purple-500 hover:bg-purple-600 text-white py-2 px-6 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 border-b-4 border-purple-700">
+                    RETRY LEVEL <span id="retry-level-num">1</span>
+                </button>
+                <button id="restart-btn" class="game-font text-xl bg-green-500 hover:bg-green-600 text-white py-2 px-6 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 border-b-4 border-green-700">
+                    RESTART GAME
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Score HUD -->
+    <div id="hud" class="absolute top-4 left-4 right-4 flex justify-between hidden pointer-events-none">
+        <div class="game-font text-2xl text-blue-900 drop-shadow-[0_2px_2px_rgba(255,255,255,0.8)]">
+            Score: <span id="hud-score">0</span>
+        </div>
+        <div class="game-font text-2xl text-purple-900 drop-shadow-[0_2px_2px_rgba(255,255,255,0.8)]">
+            Level: <span id="hud-level">1</span>
+        </div>
+    </div>
+
+    <!-- Mobile Controls -->
+    <div id="mobile-controls" class="absolute bottom-8 left-4 right-4 flex justify-between hidden z-40 pointer-events-none">
+        <button id="btn-left" class="pointer-events-auto bg-white/50 backdrop-blur-md border-2 border-white/70 rounded-full w-16 h-16 flex items-center justify-center text-3xl shadow-lg active:bg-white/80 select-none touch-manipulation">
+            ⬅️
+        </button>
+        <button id="btn-right" class="pointer-events-auto bg-white/50 backdrop-blur-md border-2 border-white/70 rounded-full w-16 h-16 flex items-center justify-center text-3xl shadow-lg active:bg-white/80 select-none touch-manipulation">
+            ➡️
+        </button>
+    </div>
+</div>
+
+<script>
+    // Game Constants
+    const CANVAS_WIDTH = 360;
+    const CANVAS_HEIGHT = 640;
+    const GRAVITY = 0.1; 
+    const JUMP_POWER = -8.5; 
+    const SUPER_JUMP_POWER = -13.0; 
+    const MEGA_JUMP_POWER = -19.0; 
+    const PLAYER_SPEED = 6;
+    const PLATFORM_WIDTH = 65;
+    const PLATFORM_HEIGHT = 15;
+    const MAX_FALL_SPEED = 6; 
+
+    // Game State
+    let state = 'START'; // START, PLAYING, GAMEOVER
+    let score = 0;
+    let highscore = localStorage.getItem('jumpingDogHighscore') || 0;
+    let totalTilesGenerated = 0;
+    let currentLevel = 1;
+    let checkpoints = { 1: { score: 0 } };
+
+    // --- PIXI.JS SETUP FOR HARDWARE ACCELERATED RENDERING ---
+    const canvas = document.getElementById('gameCanvas');
+    const app = new PIXI.Application({
+        view: canvas,
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
+        backgroundAlpha: 0, // Let CSS gradient show through
+        resolution: window.devicePixelRatio || 1,
+        autoDensity: true
+    });
+
+    // Create Textures offscreen to ensure crisp Emojis in WebGL
+    const preRenderDog = document.createElement('canvas');
+    preRenderDog.width = 40; preRenderDog.height = 40;
+    const pCtxDog = preRenderDog.getContext('2d');
+    pCtxDog.font = "38px Arial"; pCtxDog.textAlign = "center"; pCtxDog.textBaseline = "middle";
+    pCtxDog.fillText("🐶", 20, 20);
+    const texDog = PIXI.Texture.from(preRenderDog);
+
+    const preRenderRocket = document.createElement('canvas');
+    preRenderRocket.width = 20; preRenderRocket.height = 20;
+    const pCtxRocket = preRenderRocket.getContext('2d');
+    pCtxRocket.fillStyle = '#fff'; pCtxRocket.font = "14px Arial"; pCtxRocket.textAlign = "center"; pCtxRocket.textBaseline = "middle";
+    pCtxRocket.fillText("🚀", 10, 10);
+    const texRocket = PIXI.Texture.from(preRenderRocket);
+
+    const preRenderCloud = document.createElement('canvas');
+    preRenderCloud.width = 100; preRenderCloud.height = 60;
+    const pCtxCloud = preRenderCloud.getContext('2d');
+    pCtxCloud.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    pCtxCloud.beginPath(); pCtxCloud.arc(30, 40, 20, 0, Math.PI * 2); pCtxCloud.arc(50, 25, 25, 0, Math.PI * 2); pCtxCloud.arc(70, 40, 20, 0, Math.PI * 2); pCtxCloud.fill();
+    const texCloud = PIXI.Texture.from(preRenderCloud);
+
+    // Containers to keep render order correct (Clouds -> Platforms -> Particles -> Player)
+    const cloudContainer = new PIXI.Container();
+    const platformContainer = new PIXI.Container();
+    const particleContainer = new PIXI.Container();
+    app.stage.addChild(cloudContainer);
+    app.stage.addChild(platformContainer);
+    app.stage.addChild(particleContainer);
+
+    // Pixi Player Sprite
+    const playerSprite = new PIXI.Sprite(texDog);
+    playerSprite.anchor.set(0.5); // Center anchor for easy scaling/squashing
+    playerSprite.visible = false;
+    app.stage.addChild(playerSprite);
+
+    // Logical Entities
+    let player = {
+        x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2,
+        width: 32, height: 32, vx: 0, vy: 0, facingRight: true
+    };
+    let platforms = [];
+    let particles = [];
+    let clouds = [];
+
+    // UI Elements
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const hud = document.getElementById('hud');
+    const hudScore = document.getElementById('hud-score');
+    const hudLevel = document.getElementById('hud-level');
+    const finalScore = document.getElementById('final-score');
+    const bestScore = document.getElementById('best-score');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const retryLevelBtn = document.getElementById('retry-level-btn');
+    const retryLevelNum = document.getElementById('retry-level-num');
+    const muteBtn = document.getElementById('mute-btn');
+    const mobileControls = document.getElementById('mobile-controls');
+    const btnLeft = document.getElementById('btn-left');
+    const btnRight = document.getElementById('btn-right');
+
+    // Audio System & Google Play Bridge Setup
+    let audioCtx;
+    let isMuted = false;
+
+    muteBtn.addEventListener('click', () => {
+        isMuted = !isMuted;
+        muteBtn.innerText = isMuted ? '🔇' : '🔊';
+        if (!isMuted && audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    });
+
+    function initAudio() {
+        if (!audioCtx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playSound(type) {
+        if (isMuted || !audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        osc.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        const now = audioCtx.currentTime;
+
+        if (type === 'jump') {
+            osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+            gainNode.gain.setValueAtTime(0.3, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            osc.start(now); osc.stop(now + 0.1);
+        } else if (type === 'power') {
+            osc.type = 'triangle'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(1200, now + 0.2);
+            gainNode.gain.setValueAtTime(0.3, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+        } else if (type === 'super') {
+            osc.type = 'square'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(1500, now + 0.4);
+            gainNode.gain.setValueAtTime(0.2, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+            osc.start(now); osc.stop(now + 0.4);
+        } else if (type === 'break') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.2);
+            gainNode.gain.setValueAtTime(0.4, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+        } else if (type === 'gameover') {
+            osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.5);
+            gainNode.gain.setValueAtTime(0.4, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            osc.start(now); osc.stop(now + 0.5);
+        }
+    }
+
+    // Talk to Android WebView if Wrapped
+    window.addEventListener('load', () => {
+        if (window.AndroidPlayBridge) window.AndroidPlayBridge.initGame();
+    });
+
+    // Input Handling
+    let keys = { ArrowLeft: false, ArrowRight: false, a: false, d: false };
+    let touchTargetX = null;
+    let isTouching = false;
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.ArrowLeft = true;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.ArrowRight = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.ArrowLeft = false;
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.ArrowRight = false;
+    });
+
+    function getCanvasX(clientX) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        return (clientX - rect.left) * scaleX;
+    }
+
+    // Touch & Mouse Support
+    canvas.addEventListener('mousedown', (e) => { isTouching = true; touchTargetX = getCanvasX(e.clientX); });
+    canvas.addEventListener('mousemove', (e) => { if (isTouching) touchTargetX = getCanvasX(e.clientX); });
+    window.addEventListener('mouseup', () => { isTouching = false; touchTargetX = null; });
+
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault(); isTouching = true; touchTargetX = getCanvasX(e.touches.clientX);
+    }, {passive: false});
+    
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault(); if (isTouching) touchTargetX = getCanvasX(e.touches.clientX);
+    }, {passive: false});
+
+    window.addEventListener('touchend', () => { isTouching = false; touchTargetX = null; });
+
+    // Mobile Button Listeners
+    const pressLeft = (e) => { e.preventDefault(); keys.ArrowLeft = true; };
+    const releaseLeft = (e) => { e.preventDefault(); keys.ArrowLeft = false; };
+    const pressRight = (e) => { e.preventDefault(); keys.ArrowRight = true; };
+    const releaseRight = (e) => { e.preventDefault(); keys.ArrowRight = false; };
+
+    btnLeft.addEventListener('mousedown', pressLeft); btnLeft.addEventListener('touchstart', pressLeft, {passive: false});
+    btnLeft.addEventListener('mouseup', releaseLeft); btnLeft.addEventListener('mouseleave', releaseLeft); btnLeft.addEventListener('touchend', releaseLeft);
+    btnRight.addEventListener('mousedown', pressRight); btnRight.addEventListener('touchstart', pressRight, {passive: false});
+    btnRight.addEventListener('mouseup', releaseRight); btnRight.addEventListener('mouseleave', releaseRight); btnRight.addEventListener('touchend', releaseRight);
+
+    // UI Buttons
+    startBtn.addEventListener('click', () => startGame(1));
+    restartBtn.addEventListener('click', () => startGame(1));
+    retryLevelBtn.addEventListener('click', () => startGame(currentLevel));
+
+    function initClouds() {
+        clouds.forEach(c => c.sprite.destroy()); // clear old
+        clouds = [];
+        for(let i=0; i<4; i++) {
+            let scale = 0.5 + Math.random() * 0.8;
+            let sprite = new PIXI.Sprite(texCloud);
+            sprite.width = 100 * scale; sprite.height = 60 * scale;
+            cloudContainer.addChild(sprite);
+
+            clouds.push({
+                x: Math.random() * CANVAS_WIDTH,
+                y: Math.random() * CANVAS_HEIGHT,
+                speed: 0.1 + Math.random() * 0.2,
+                width: 100 * scale,
+                sprite: sprite
+            });
+        }
+    }
+
+    function buildPlatformGraphics(type, width, height) {
+        const g = new PIXI.Graphics();
+        if (type === 'normal') {
+            g.beginFill(0x4ade80); g.drawRect(0, 0, width, height); g.endFill();
+            g.beginFill(0x854d0e); g.drawRect(0, height - 5, width, 5); g.endFill();
+        } else if (type === 'power') {
+            g.beginFill(0xfb923c); g.drawRect(0, 0, width, height); g.endFill();
+            g.lineStyle(3, 0xeab308); g.moveTo(width/2 - 10, 0); g.lineTo(width/2 + 10, -4); g.lineTo(width/2 - 10, -8); g.lineTo(width/2 + 10, -12);
+        } else if (type === 'moving') {
+            g.beginFill(0x60a5fa); g.drawRect(0, 0, width, height); g.endFill();
+            g.beginFill(0x1e3a8a); g.drawRect(0, height - 5, width, 5); g.endFill();
+        } else if (type === 'fragile') {
+            g.beginFill(0xd97706); g.drawRect(0, 0, width, height); g.endFill();
+            g.lineStyle(2, 0x78350f); g.moveTo(10, 0); g.lineTo(20, 8); g.lineTo(15, height); g.moveTo(40, 0); g.lineTo(35, 10); g.lineTo(45, height);
+        } else if (type === 'super') {
+            g.beginFill(0xa855f7); g.drawRect(0, 0, width, height); g.endFill();
+            const r = new PIXI.Sprite(texRocket);
+            r.x = width/2 - 10; r.y = height/2 - 10;
+            g.addChild(r);
+        }
+        return g;
+    }
+
+    function createPlatform(y) {
+        totalTilesGenerated++;
+        
+        // Check level up
+        let newLevel = Math.floor(totalTilesGenerated / 50) + 1;
+        if (newLevel > currentLevel) {
+            currentLevel = newLevel;
+            checkpoints[currentLevel] = { score: score };
+            if (hudLevel) hudLevel.innerText = currentLevel;
+        }
+
+        // Determine type based on probabilities
+        let typeRand = Math.random();
+        let type = 'normal';
+        if (typeRand < 0.03) type = 'super';
+        else if (typeRand < 0.12) type = 'power';
+        else if (typeRand < 0.22) type = 'fragile';
+        else if (typeRand < 0.42 && currentLevel > 1) type = 'moving';
+
+        let x = Math.random() * (CANVAS_WIDTH - PLATFORM_WIDTH);
+        let vx = (type === 'moving') ? (Math.random() > 0.5 ? 1 : -1) * (1 + Math.random()) : 0;
+
+        let sprite = buildPlatformGraphics(type, PLATFORM_WIDTH, PLATFORM_HEIGHT);
+        platformContainer.addChild(sprite);
+
+        return { x, y, width: PLATFORM_WIDTH, height: PLATFORM_HEIGHT, type, vx, broken: false, sprite };
+    }
+
+    function generateInitialPlatforms() {
+        platforms.forEach(p => p.sprite.destroy());
+        platforms = [];
+        
+        let baseSprite = buildPlatformGraphics('normal', PLATFORM_WIDTH, PLATFORM_HEIGHT);
+        platformContainer.addChild(baseSprite);
+        platforms.push({ x: CANVAS_WIDTH/2 - PLATFORM_WIDTH/2, y: CANVAS_HEIGHT - 50, width: PLATFORM_WIDTH, height: PLATFORM_HEIGHT, type: 'normal', vx: 0, broken: false, sprite: baseSprite });
+        
+        let currentY = CANVAS_HEIGHT - 100;
+        while (currentY > -100) {
+            platforms.push(createPlatform(currentY));
+            currentY -= (35 + Math.random() * 35);
+        }
+    }
+
+    function startGame(level = 1) {
+        initAudio(); 
+        state = 'PLAYING';
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+        hud.classList.remove('hidden');
+        mobileControls.classList.remove('hidden'); 
+        
+        currentLevel = level;
+        score = checkpoints[level] ? checkpoints[level].score : 0;
+        totalTilesGenerated = (level - 1) * 50;
+        
+        hudScore.innerText = Math.floor(score);
+        hudLevel.innerText = currentLevel;
+        
+        player = { x: CANVAS_WIDTH / 2 - 16, y: CANVAS_HEIGHT - 150, width: 32, height: 32, vx: 0, vy: 0, facingRight: true };
+        playerSprite.visible = true;
+
+        particles.forEach(p => p.sprite.destroy());
+        particles = [];
+        
+        generateInitialPlatforms();
+        initClouds();
+    }
+
+    function gameOver() {
+        state = 'GAMEOVER';
+        playSound('gameover');
+        hud.classList.add('hidden');
+        mobileControls.classList.add('hidden'); 
+        gameOverScreen.classList.remove('hidden');
+        
+        if (score > highscore) {
+            highscore = Math.floor(score);
+            localStorage.setItem('jumpingDogHighscore', highscore);
+            if (window.AndroidPlayBridge && window.AndroidPlayBridge.saveHighscore) {
+                window.AndroidPlayBridge.saveHighscore(highscore, currentLevel);
+            }
+        }
+        
+        finalScore.innerText = Math.floor(score);
+        bestScore.innerText = highscore;
+        retryLevelNum.innerText = currentLevel;
+    }
+
+    function spawnParticles(x, y, colorCode, count=5) {
+        for(let i=0; i<count; i++) {
+            let s = new PIXI.Graphics();
+            s.beginFill(colorCode); s.drawRect(-3, -3, 6, 6); s.endFill();
+            particleContainer.addChild(s);
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6,
+                life: 1, sprite: s
+            });
+        }
+    }
+
+    // Main Game Loop handled automatically by Pixi Ticker
+    app.ticker.add((delta) => {
+        if (state !== 'PLAYING') return;
+
+        // Player X Movement
+        if (keys.ArrowLeft) {
+            player.vx = -PLAYER_SPEED; player.facingRight = false;
+        } else if (keys.ArrowRight) {
+            player.vx = PLAYER_SPEED; player.facingRight = true;
+        } else if (isTouching && touchTargetX !== null) {
+            const dx = touchTargetX - (player.x + player.width/2);
+            if (Math.abs(dx) > 5) {
+                player.vx = dx * 0.15; player.facingRight = dx > 0;
+            } else {
+                player.vx *= 0.5; 
+            }
+        } else {
+            player.vx *= 0.8; 
+        }
+
+        player.x += player.vx;
+        if (player.x > CANVAS_WIDTH) player.x = -player.width;
+        else if (player.x + player.width < 0) player.x = CANVAS_WIDTH;
+
+        // Player Y Movement 
+        player.vy += GRAVITY;
+        if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED;
+        player.y += player.vy;
+
+        // Platform specific logic
+        platforms.forEach(p => {
+            if (p.type === 'moving') {
+                p.x += p.vx;
+                if (p.x <= 0 || p.x + p.width >= CANVAS_WIDTH) p.vx *= -1;
+            }
+        });
+
+        // Collision Detection
+        if (player.vy > 0) { 
+            for (let i = 0; i < platforms.length; i++) {
+                let p = platforms[i];
+                if (p.broken) continue;
+
+                if (player.x + player.width * 0.8 > p.x && player.x + player.width * 0.2 < p.x + p.width && 
+                    player.y + player.height >= p.y && player.y + player.height <= p.y + p.height + player.vy) {
+                    
+                    player.y = p.y - player.height;
+                    
+                    if (p.type === 'super') {
+                        player.vy = MEGA_JUMP_POWER; spawnParticles(player.x + player.width/2, p.y, 0xc084fc, 20); playSound('super');
+                    } else if (p.type === 'power') {
+                        player.vy = SUPER_JUMP_POWER; spawnParticles(player.x + player.width/2, p.y, 0xf59e0b, 15); playSound('power');
+                    } else {
+                        player.vy = JUMP_POWER; spawnParticles(player.x + player.width/2, p.y, 0x22c55e, 8); playSound('jump');
+                    }
+
+                    if (p.type === 'fragile') {
+                        p.broken = true; playSound('break'); spawnParticles(p.x + p.width/2, p.y + p.height/2, 0x78350f, 12);
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Camera Scroll / Score logic
+        let scrollThreshold = CANVAS_HEIGHT / 2;
+        if (player.y < scrollThreshold) {
+            let diff = scrollThreshold - player.y;
+            player.y = scrollThreshold;
+            score += diff * 0.1;
+            hudScore.innerText = Math.floor(score);
+            
+            platforms.forEach(p => p.y += diff);
+            clouds.forEach(c => c.y += diff * 0.5); 
+        }
+
+        // Manage Platforms 
+        for (let i = platforms.length - 1; i >= 0; i--) {
+            let p = platforms[i];
+            if (p.y > CANVAS_HEIGHT || p.broken) {
+                p.sprite.destroy();
+                platforms.splice(i, 1);
+            }
+        }
+
+        let highestPlatform = platforms.reduce((min, p) => p.y < min ? p.y : min, CANVAS_HEIGHT);
+        while (highestPlatform > -50) {
+            let newY = highestPlatform - (35 + Math.random() * (25 + Math.min(currentLevel*2, 20))); 
+            platforms.push(createPlatform(newY));
+            highestPlatform = newY;
+        }
+
+        // Update Particles
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+            if (p.life <= 0) {
+                p.sprite.destroy();
+                particles.splice(i, 1);
+            }
+        }
+
+        // Update Clouds
+        clouds.forEach(c => {
+            c.x -= c.speed;
+            if (c.x + c.width < 0) {
+                c.x = CANVAS_WIDTH;
+                c.y = Math.random() * CANVAS_HEIGHT;
+            }
+        });
+
+        // --- Sync Logical Positions to Pixi Sprites ---
+        let stretch = Math.max(0.8, Math.min(1.2, 1 + (player.vy * 0.02)));
+        let squash = Math.max(0.8, Math.min(1.2, 1 - (player.vy * 0.02)));
+        
+        playerSprite.x = player.x + player.width/2; 
+        playerSprite.y = player.y + player.height/2;
+        playerSprite.scale.x = player.facingRight ? squash : -squash;
+        playerSprite.scale.y = stretch;
+
+        platforms.forEach(p => { p.sprite.x = p.x; p.sprite.y = p.y; });
+        particles.forEach(p => { p.sprite.x = p.x; p.sprite.y = p.y; p.sprite.alpha = p.life; });
+        clouds.forEach(c => { c.sprite.x = c.x; c.sprite.y = c.y; });
+
+        if (player.y > CANVAS_HEIGHT) gameOver();
+    });
+
+    // Initial Render Draw
+    initClouds();
+
+</script>
+</body>
+</html>
